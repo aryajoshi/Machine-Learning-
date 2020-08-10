@@ -1,0 +1,155 @@
+---
+title: "Car auction anlaysis using machine learning"
+output: html_document
+author: "Arya Joshi"
+---
+
+
+```{r setup, include=FALSE}
+require(tidyverse)
+require(lattice)
+require(dplyr)
+
+```
+
+# Loading the dataset
+```{r}
+dataset <- read_csv("auction_data.csv")
+dataset
+```
+```{r}
+# Identifying thes two potential consistency issues in the dataset
+
+#Checking inconsistenceny in the dataset.
+dataset %>% is.na %>% colSums()
+# Datahast has NA values in cleanPrice, ReatilAveragePrice and AveragePrice
+dataset %>% filter(AveragePrice == 0 | CleanPrice == 0 | RetailAveragePrice == 0)
+#There are around 828 rows of inconsistent data in the AveragePrice, CleanPrice and RetailPrice Column. Instead of  car price its displaying 0 and 1. 
+
+```
+
+
+
+```{r}
+
+#Checking relationship between auction price and Mileage
+
+xyplot(AuctionPrice ~ Mileage, data = dataset)
+
+ggplot(dataset)+geom_point(aes(x=Mileage, y=AuctionPrice))+geom_smooth(method='lm', aes(x=Mileage, y=AuctionPrice), fill=NA)
+
+cor(dataset$Mileage, dataset$AuctionPrice, method = c("pearson"))
+
+
+# By ploting we can interpret that AuctionPrice and Mileage are negatively correlated,If Mileage is increasing than Auction price is decreasing. Most of the cars with high Mileage have a lower Auction price and few cars which are having high price have low mileage, Such cars must be luxurious cars.
+```
+```{r}
+
+#Predicting Auction price
+
+install.packages('leaps') 
+require(leaps)   #Branch-and-bound algorithm
+
+## Loading required package: leaps
+lps=regsubsets(AuctionPrice ~ Mileage + AveragePrice + CleanPrice + RetailAveragePrice + WarrantyCost + BadBuy + VehicleAge, data=dataset, method='backward' )
+plot(lps, scale='adjr')
+
+# Considering all the numeric variables and suggestion by leaps backward selection method we can interpret that the very first model with adjusted r square value of 0.67 has all the variables in consideration can be a best fit
+
+# However we can further analyze by checking the P values and eliminating variables of the recommended model.
+model1 <- lm(AuctionPrice ~ Mileage + AveragePrice + CleanPrice + RetailAveragePrice + WarrantyCost + BadBuy + VehicleAge, data=dataset)
+summary(model1) # Adj r square - 0.6697
+
+# Deleted WarrantyCost
+model2 <- lm(AuctionPrice ~ Mileage + AveragePrice + CleanPrice + RetailAveragePrice + BadBuy + VehicleAge, data=dataset)
+summary(model2) # Adj r square - 0.6697
+
+# Deleted WarrantyCost, RetailAveragePrice 
+model3 <- lm(AuctionPrice ~ Mileage + AveragePrice + CleanPrice + VehicleAge + BadBuy, data=dataset)
+summary(model3) # Adj r square - 0.6676
+
+
+# In above 3 models we can interpret that, In model1 when all the variables were taken into consideration adj r square value was 0.6697. As we eliminated one variable in model 2 adj r square remianed the same. However, In model3 when we removed 2 variables adj r squre became slightly less with the value of 0.6676. We do not want adj r square value to get lower so we can select model2. Model2 has same the r square as model1 but with less variables. Hence, Model2 is the best fit. If auction price will increase by 1 than Mileage will decrease by -0.01459
+```
+```{r}
+
+# Predicting Bad buy using classification algorithm
+
+#Developing a knn model with numeric variables and one categorical variable to predict BadBuy.
+
+# Data pre-processing and cleaning for Knn.
+dataset <-  na.omit(dataset)
+
+
+#Dummy coding for categorical variable
+Color_dummies = model.matrix(~Color-1, data = dataset)
+
+# Creating a dataset with numeric values
+nums <- unlist(lapply(dataset, is.numeric))
+numeric<- dataset[ , nums]
+
+# Creating a dataset with numeric and color_dummies
+knn_dataset = data.frame(Color_dummies,numeric)
+
+
+#Created Min-max normalize function
+normalize<-function(x){
+  (x-min(x))/(max(x)-min(x))
+}
+
+#Normalising the dataset for Knn
+normalized_knn_dataset = knn_dataset%>%mutate_if(is.numeric, normalize)
+
+set.seed(123)
+
+# Adding new column ID to the dataset
+normalized_knn_dataset = normalized_knn_dataset%>%mutate(id=row_number())
+
+
+train=normalized_knn_dataset%>%sample_frac(size=.8)
+test=anti_join(normalized_knn_dataset, train, by='id')
+
+
+## Creating training and testing vectors  
+training.label=train$BadBuy
+testing.label=test$BadBuy
+
+training.input=train%>%select( -BadBuy, -id )   
+testing.input=test%>%select( -BadBuy, -id )
+
+require(class)
+predictions<-knn(train = training.input, test = testing.input, cl=training.label, k=11)
+accuracy=sum(predictions==testing.label)/length(predictions)
+accuracy
+# Model accuracy - 87.89145 %
+
+#3b Creating confusion matrix
+table(predictions, testing.label)
+
+#Accuracy of the model is close to 88% which means 88% of testing data was correctly classified. We can verify this by looking at the confusion matrix , when adding 12801+25 gives 12826 and when we divide 12826 by length of testing data which is 14593 comes to 0.8789145 which essentially is our model accuracy found intially so we can in principle say our model works correctly.
+
+```
+```{r}
+# 4a Assume that your model which has an adjusted R^2 of 0.8 predicted the value of a car as 95,000. Is this a reliable prediction? Why (not)?
+# This is a reliable prediction because adjusted R^2 of 0.8 suggests that the trend line fits well to the data/close to the line. Hence it captures the linear assosication between the variables which is why we can conclude that 95,000 is a reliable car value.
+```
+
+
+```{r}
+#4b When selecting the k during knn, which one is better smaller or larger values of knn? Briefly explain your reasoning using your own words.
+# If we have a nosiy data then smaller K values might not be the best way to classify the data and if we take a larger value of K then it will be computationally expensive. We should chose odd number of K when there is binary classification problem.
+```
+
+
+```{r}
+#4c How do we incorporate categorical variables into a knn model? What is the problem with using them as-is ?
+# Knn model cannot directly handle string/character values because knn is based on distance based similarity measure which uses the concept of Euclidean distance and we cannot calculate the difference between categorical vairbales;and thus, creating dummy variables for the categorical variables solves this problem.  
+```
+
+
+```{r}
+#4d What is an alternative method (to knn) to predict Badbuy ?
+# Decision Tree Model can be used as an alternative method to predict Badbuy.
+```
+
+

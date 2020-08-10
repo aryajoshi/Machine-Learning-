@@ -1,0 +1,169 @@
+---
+title: "Time series"
+author: "Arya Joshi"
+date: "7/17/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(ggplot2)
+library(tidyverse)
+library(timeSeries)
+```
+
+```{r}
+#Loadinf the dataset 
+air_data = datasets::AirPassengers
+```
+
+```{r}
+# Make sure whether the data is of time series 
+class(air_data)
+```
+```{r}
+#There are different components of time series - General Trend, Seasonal Trend, Irregular Fluctuations
+plot(air_data)
+
+```
+                                        Genrela Trend Time Series
+                                        
+                                        
+```{r}
+#Start date 
+ start(air_data)
+```
+```{r}
+end(air_data)
+```
+                               
+ The range of time series is 1949 - 1960
+ 
+```{r}
+summary(air_data)
+```
+ 
+```{r}
+#Cycle accorss the year 
+cycle(air_data)
+
+```
+```{r}
+
+plot(aggregate(air_data, FUN = mean))
+```
+                                            General Trend of data - Going upwards 
+                                            
+```{r}
+# Boxplot accorss the month will give seasonal effect
+boxplot(air_data ~ cycle(air_data))
+# High numbers of passengers are flying during the month of July and August accorss the time period of 11 years
+```
+```{r}
+#To make time series stationery
+#log fuction is used to make variance equal 
+#Still one issue is pending that mean is changing according to the time.
+plot(log(air_data))
+```
+                                            
+```{r}
+#Use difference with log inorder to get your time series statuinery 
+#Now if you draw a mean line it will be constant, mean and variance wont change in any time interval
+plot(diff(log(air_data)))
+```
+```{r}
+#Once the time series is stationery, you can use time series model
+# There are different types of time serie model, Here ARIMA will be used. PQD are the values associated with ARIMA model 
+
+# AR I MA model time series model 
+# AR - Auto Regressive, means on the basis of your past vlaues you predict your future values, P
+# I - Integration, Q
+# MA - Moving Average, D
+```
+
+```{r}
+# PQD values are derive from the graphs.
+# q value is derive from the graph called Auto Correlation Graph
+# Model sattionery is important, We will diplay this below
+```
+
+```{r}
+#If data is not stationery
+acf(air_data)
+```
+                Our aim  should be to get the values under the blue line
+
+```{r}
+#Now Auto Correlation Function with log and differnee function (Stationery data )
+acf(diff(log(air_data)))  #q value, Q here is the coeeficient for Moving Average
+
+# How to determine q value using the below graph ?
+#Counting of line should start from 0
+# Any line count before the inverted line should be used as Q value or (Coefficient of moving average)
+# In our case line 1 is the first line before the inverted line, so values of q becomes 1
+```
+                                                q = 1
+
+```{r}
+#Partial auto correlation function graph is used to derive p value, With same logic 
+
+pacf(diff(log(air_data)))
+
+# In our case the 0th line should be considered as p value. so p 0
+
+```
+                                                 p = 0
+                                                 
+```{r}
+# d is the differentiation function used to stationery the means of the time series data, IN our case  by doing just one differentiation we got our data to standardize, so the value of d is 1 
+
+```
+                                                 
+```{r}
+# Finnaly Lets predict the future 10 years 
+#c(p,d,q) --- Values change according to the graph, get these values from the above chart
+
+#Model creation
+fit <- arima(log(air_data), c(0,1,1), seasonal = list(order= c(0,1,1), period = 12))
+
+#Fitting the model
+
+pred <- predict(fit, n.ahead = 10 * 12) # 10 is for how many years you want to predict 
+
+
+#Most imporatnt step
+# After model creation first the values need to be converted to decimal, Beacuse values are in log scale
+pred1 <- 2.718^pred$pred
+
+# Plot the model
+
+ts.plot(air_data, 2.718^pred$pred, log = 'y', lty = c(1,3))
+
+```
+10 years of prediction for the total count of passengers will travel
+
+```{r}
+ #Testing the model 
+
+datawide <- ts(air_data, frequency = 12, start = c(1949,1), end = c(1959,12))
+
+fit <- arima(log(datawide), c(0,1,1), seasonal = list(order= c(0,1,1), period = 12))
+
+pred <- predict(fit, n.ahead = 10 * 12) 
+
+pred1 <- 2.718^pred$pred
+
+data1 <- head(pred1,12)
+
+predicted_1960 <- round(data1, digits = 0)
+
+original_1960 <- tail(air_data,12)
+
+
+
+
+
+
+              
+```
+
+ 
